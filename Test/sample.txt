@@ -1,1 +1,3 @@
 Test file for DAT-FIM.
+
+Edit that will change the hash.

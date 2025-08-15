@@ -1,7 +1,17 @@
 from pathlib import Path
+import os
 import json
 import argparse
 from Main.core import hash_file
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+DEFAULT_MONITOR = PROJECT_ROOT / "Test"
+ENV_MONITOR = os.getenv("FIM_FOLDER")
+MONITOR_FOLDER = Path(ENV_MONITOR).expanduser().resolve() if ENV_MONITOR else DEFAULT_MONITOR
+
+def resolve_path(p: str | Path) -> Path:
+    p = Path(p)
+    return p if p.is_absolute() else (MONITOR_FOLDER / p)
 
 def iter_files(root: Path, exclude_hidden: bool = True):
     for p in root.rglob("*"):
@@ -19,19 +29,27 @@ def build_baseline(root: Path, algo: str = "sha256", chunk_size: int = 65536) ->
             digest = hash_file(str(path), algo=algo, chunk_size=chunk_size)
             baseline[rel] = digest
         except Exception as e:
-            print("[WARN] Could not hash {rel}: {e}")
+            print(f"[WARN] Could not hash {rel}: {e}")
     return baseline
 
 def main():
     parser = argparse.ArgumentParser(description="Create a file-integrity baseline (JSON).")
-    parser.add_argument("folder", help="Folder to scan (root of your dataset).")
+    parser.add_argument("folder", nargs="?", default=None,
+                        help="Folder to scan (defaults to MONITOR_FOLDER).")
+    parser.add_argument("-m", "--monitor", default=None,
+                        help="Override MONITOR_FOLDER (or set env FIM_FOLDER).")
     parser.add_argument("-o", "--output", default="baseline.json",
                         help="Output JSON file (default: baseline.json).")
     parser.add_argument("-a", "--algo", default="sha256",
                         help="Hash algorithm (sha256, sha1, md5, etc.). Default: sha256")
     args = parser.parse_args()
 
-    root = Path(args.folder).expanduser().resolve()
+    # Resolve monitor root (CLI > env > default)
+    monitor_root = Path(args.monitor).expanduser().resolve() if args.monitor else MONITOR_FOLDER
+
+    # If a folder was provided, resolve it relative to MONITOR_FOLDER (for consistency with checker)
+    root = resolve_path(args.folder) if args.folder else monitor_root
+
     if not root.is_dir():
         raise SystemExit(f"Folder not found: {root}")
 

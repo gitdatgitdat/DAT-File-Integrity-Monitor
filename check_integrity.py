@@ -1,25 +1,41 @@
 import os
 import sys
 import json
-
+import argparse
+from pathlib import Path
 from Main.core import hash_file
 
 BASELINE_FILE = "baseline.json"
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = Path(__file__).resolve().parent
+DEFAULT_MONITOR = PROJECT_ROOT / "Test"
+ENV_MONITOR = os.getenv("FIM_FOLDER")
+MONITOR_FOLDER = Path(ENV_MONITOR).expanduser().resolve() if ENV_MONITOR else DEFAULT_MONITOR
 
-def load_baseline(path: str = BASELINE_FILE) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
+def load_baseline(path: Path) -> dict:
+    with path.open("r", encoding="utf-8") as f:
         return json.load(f)
-    
-def resolve_path(p: str) -> str:
-    """Resolve a path from the baseline to an absolute path on disk."""
-    return p if os.path.isabs(p) else os.path.join(PROJECT_ROOT, p)
+
+def resolve_path(p: str | Path) -> Path:
+    p = Path(p)
+    return p if p.is_absolute() else (MONITOR_FOLDER / p)
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Check files against a baseline JSON.")
+    parser.add_argument("-b", "--baseline", default=BASELINE_FILE,
+                        help="Path to baseline JSON (default: baseline.json)")
+    parser.add_argument("-m", "--monitor", default=None,
+                        help="Override MONITOR_FOLDER (or set env FIM_FOLDER).")
+    args = parser.parse_args()
+
+    # Apply monitor override (CLI > env > default)
+    global MONITOR_FOLDER
+    MONITOR_FOLDER = Path(args.monitor).expanduser().resolve() if args.monitor else MONITOR_FOLDER
+
+    baseline_path = Path(args.baseline).expanduser().resolve()
     try:
-        baseline = load_baseline()
+        baseline = load_baseline(baseline_path)
     except FileNotFoundError:
-        print(f"[ERROR] Baseline file not found: {BASELINE_FILE}")
+        print(f"[ERROR] Baseline file not found: {baseline_path}")
         sys.exit(1)
     except json.JSONDecodeError as e:
         print(f"[ERROR] Baseline JSON is invalid: {e}")
@@ -32,12 +48,12 @@ def main() -> None:
     for rel_path, expected_hash in baseline.items():
         target = resolve_path(rel_path)
 
-        if not os.path.exists(target):
+        if not target.exists():
             missing.append(rel_path)
             continue
 
         try:
-            current_hash = hash_file(target)  # sha256 by default
+            current_hash = hash_file(str(target))  # sha256 by default
         except Exception as e:
             print(f"[ERROR] Could not hash {rel_path}: {e}")
             missing.append(rel_path)
@@ -73,7 +89,6 @@ def main() -> None:
         sys.exit(0)
     else:
         sys.exit(2)
-
 
 if __name__ == "__main__":
     main()
