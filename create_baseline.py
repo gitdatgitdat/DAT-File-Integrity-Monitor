@@ -1,9 +1,14 @@
 from pathlib import Path
+from datetime import datetime, timezone
 import os
 import json
 import argparse
 from Main.core import hash_file
 
+# Allowed algorithms
+SAFE_ALGOS = ["sha256", "sha3_256", "sha512_256", "blake3"]
+
+# File pathing
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_MONITOR = PROJECT_ROOT / "Test"
 ENV_MONITOR = os.getenv("FIM_FOLDER")
@@ -13,6 +18,7 @@ def resolve_path(p: str | Path) -> Path:
     p = Path(p)
     return p if p.is_absolute() else (MONITOR_FOLDER / p)
 
+# Directory to monitor and baseline creation
 def iter_files(root: Path, exclude_hidden: bool = True):
     for p in root.rglob("*"):
         if not p.is_file():
@@ -32,6 +38,23 @@ def build_baseline(root: Path, algo: str = "sha256", chunk_size: int = 65536) ->
             print(f"[WARN] Could not hash {rel}: {e}")
     return baseline
 
+def pick_algo_interactively(default="sha256") -> str:
+    print("\nSelect hash algorithm:")
+    for i, name in enumerate(SAFE_ALGOS, 1):
+        tag = " (default)" if name == default else ""
+        print(f"  {i}) {name}{tag}")
+    choice = input("Enter number (or press Enter for default): ").strip()
+    if not choice:
+        return default
+    try:
+        idx = int(choice)
+        if 1 <= idx <= len(SAFE_ALGOS):
+            return SAFE_ALGOS[idx - 1]
+    except ValueError:
+        pass
+    print("Invalid choice, using default.")
+    return default
+
 def main():
     parser = argparse.ArgumentParser(description="Create a file-integrity baseline (JSON).")
     parser.add_argument("folder", nargs="?", default=None,
@@ -40,28 +63,50 @@ def main():
                         help="Override MONITOR_FOLDER (or set env FIM_FOLDER).")
     parser.add_argument("-o", "--output", default="baseline.json",
                         help="Output JSON file (default: baseline.json).")
-    parser.add_argument("-a", "--algo", default="sha256",
-                        help="Hash algorithm (sha256, sha1, md5, etc.). Default: sha256")
+    parser.add_argument("-a", "--algo", default=None,
+        help="Hash algorithm. If omitted, you’ll be prompted. "
+            "Options: sha256, sha3_256, sha512_256, blake3 (default: sha256)")
+    parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Don’t prompt; if --algo is omitted, default to sha256."
+    )
     args = parser.parse_args()
 
-    # Resolve monitor root (CLI > env > default)
+    # Monitor root resolution
     monitor_root = Path(args.monitor).expanduser().resolve() if args.monitor else MONITOR_FOLDER
-
-    # If a folder was provided, resolve it relative to MONITOR_FOLDER (for consistency with checker)
     root = resolve_path(args.folder) if args.folder else monitor_root
-
     if not root.is_dir():
         raise SystemExit(f"Folder not found: {root}")
 
-    print(f"\nBuilding baseline for: {root}")
-    print(f"Algorithm: {args.algo}")
+    # Decide algorithm
+    if args.algo:
+        algo = args.algo.lower()
+        if algo not in SAFE_ALGOS:
+            raise SystemExit(f"Unsupported algorithm '{algo}'. Choose from: {', '.join(SAFE_ALGOS)}")
+    else:
+        algo = "sha256" if args.non_interactive else pick_algo_interactively(default="sha256")
 
-    baseline = build_baseline(root, algo=args.algo)
+    print(f"\nBuilding baseline for: {root}")
+    print(f"Algorithm: {algo}")
+
+    files_map = build_baseline(root, algo=algo)
+
+    # Embed metadata so the checker knows which algo to use
+    doc = {
+        "_meta": {
+            "version": 1,
+            "algo": algo,
+            "created": datetime.now(timezone.utc).isoformat(),
+            "root": str(root)
+        },
+        "files": files_map
+    }
 
     out_path = Path(args.output).resolve()
-    out_path.write_text(json.dumps(baseline, indent=2, sort_keys=True))
+    out_path.write_text(json.dumps(doc, indent=2, sort_keys=True))
 
-    print(f"\nFiles hashed: {len(baseline)}")
+    print(f"\nFiles hashed: {len(files_map)}")
     print(f"Baseline written to: {out_path}")
 
 if __name__ == "__main__":

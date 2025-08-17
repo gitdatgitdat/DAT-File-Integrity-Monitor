@@ -25,6 +25,9 @@ def main() -> None:
                         help="Path to baseline JSON (default: baseline.json)")
     parser.add_argument("-m", "--monitor", default=None,
                         help="Override MONITOR_FOLDER (or set env FIM_FOLDER).")
+    # Optional override if you ever need it (normally you won’t):
+    parser.add_argument("-a", "--algo", default=None,
+                        help="Override algorithm (normally read from baseline _meta.algo).")
     args = parser.parse_args()
 
     # Apply monitor override (CLI > env > default)
@@ -33,7 +36,7 @@ def main() -> None:
 
     baseline_path = Path(args.baseline).expanduser().resolve()
     try:
-        baseline = load_baseline(baseline_path)
+        raw = load_baseline(baseline_path)
     except FileNotFoundError:
         print(f"[ERROR] Baseline file not found: {baseline_path}")
         sys.exit(1)
@@ -41,11 +44,22 @@ def main() -> None:
         print(f"[ERROR] Baseline JSON is invalid: {e}")
         sys.exit(1)
 
+    if isinstance(raw, dict) and "files" in raw and "_meta" in raw:
+        files_map = raw["files"]
+        baseline_algo = raw["_meta"].get("algo", "sha256")
+    else:
+        # Legacy flat dict baseline: { "rel/path.txt": "hash", ... }
+        files_map = raw
+        baseline_algo = "sha256"
+
+    # Allow explicit override only if provided
+    algo = (args.algo or baseline_algo).lower()
+
     modified = []
     missing = []
     unchanged = []
 
-    for rel_path, expected_hash in baseline.items():
+    for rel_path, expected_hash in files_map.items():
         target = resolve_path(rel_path)
 
         if not target.exists():
@@ -53,19 +67,20 @@ def main() -> None:
             continue
 
         try:
-            current_hash = hash_file(str(target))  # sha256 by default
+            current_hash = hash_file(str(target), algo=algo)
         except Exception as e:
             print(f"[ERROR] Could not hash {rel_path}: {e}")
             missing.append(rel_path)
             continue
 
-        if current_hash.lower() == expected_hash.lower():
+        if current_hash.lower() == str(expected_hash).lower():
             unchanged.append(rel_path)
         else:
             modified.append((rel_path, expected_hash, current_hash))
 
     # Report Generation
     print("\n=== File Integrity Report ===")
+    print(f"Algorithm: {algo}")
 
     if modified:
         print("\nModified:")
@@ -83,6 +98,9 @@ def main() -> None:
         print("\nUnchanged:")
         for rel in unchanged:
             print(f" - {rel}")
+
+    # Summary line
+    print(f"\nSummary: {len(modified)} modified, {len(missing)} missing, {len(unchanged)} unchanged")
 
     if not modified and not missing:
         print("\nAll files match the baseline")
