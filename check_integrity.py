@@ -5,6 +5,9 @@ import argparse
 from pathlib import Path
 from Main.core import hash_file
 
+# Allowed algorithms
+SAFE_ALGOS = ["sha256", "sha3_256", "sha512_256", "blake3"]
+
 BASELINE_FILE = "baseline.json"
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_MONITOR = PROJECT_ROOT / "Test"
