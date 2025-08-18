@@ -33,6 +33,7 @@ blake3
 python create_baseline.py -a sha3_256
 
 This generates:  
+
 baseline.json (file hashes)  
 baseline.sig (signature)  
 ed25519_public.pem (public key)  
