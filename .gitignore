@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 *.json
+ed25519_private.pem
+
