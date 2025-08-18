@@ -40,7 +40,7 @@ ed25519_public.pem (public key)
 
 2. Verify files against baseline
 
-python checker.py
+python check_integrity.py
 
 4. Options
 
