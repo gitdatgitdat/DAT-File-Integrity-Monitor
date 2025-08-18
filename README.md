@@ -65,12 +65,13 @@ python checker.py --skip-signature
 ## Example Output
 
 === File Integrity Report ===
+
 Algorithm: sha256
 
 Modified:
  - example.txt
-    expected: 9c56cc51b374c3ba...
-    current : 2f5a4c10c88293fd...
+    expected: 9c56cc51b374c3ba...  
+    current : 2f5a4c10c88293fd...  
 
 Missing:
  - notes/todo.txt
