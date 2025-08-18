@@ -21,6 +21,7 @@ Supports modern hash algorithms (SHA-2, SHA-3, BLAKE3) and optional Ed25519 sign
 ## Installation
 
 Clone the repository and install dependencies:  
+
 cryptography  
 blake3  
 
