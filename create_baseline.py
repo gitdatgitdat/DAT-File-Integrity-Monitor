@@ -5,6 +5,20 @@ import json
 import argparse
 from Main.core import hash_file
 
+from cryptography.hazmat.primitives.asymmetric import ed25519
+from cryptography.hazmat.primitives import serialization
+
+with open("ed25519_public.pem", "rb") as f:
+    public_key = serialization.load_pem_public_key(f.read())
+
+baseline_bytes = Path(args.baseline).read_bytes()
+sig = Path("baseline.sig").read_bytes()
+
+try:
+    public_key.verify(sig, baseline_bytes)
+except Exception:
+    raise SystemExit("[ERROR] Baseline signature invalid!")
+
 # Allowed algorithms
 SAFE_ALGOS = ["sha256", "sha3_256", "sha512_256", "blake3"]
 

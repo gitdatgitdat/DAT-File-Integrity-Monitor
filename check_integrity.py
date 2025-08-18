@@ -4,6 +4,11 @@ import json
 import argparse
 from pathlib import Path
 from Main.core import hash_file
+from cryptography.hazmat.primitives.asymmetric import ed25519
+from cryptography.hazmat.primitives import serialization
+
+SIG_FILE = "baseline.sig"
+PUBKEY_FILE = "ed25519_public.pem"
 
 # Allowed algorithms
 SAFE_ALGOS = ["sha256", "sha3_256", "sha512_256", "blake3"]
@@ -28,6 +33,12 @@ def main() -> None:
                         help="Path to baseline JSON (default: baseline.json)")
     parser.add_argument("-m", "--monitor", default=None,
                         help="Override MONITOR_FOLDER (or set env FIM_FOLDER).")
+    parser.add_argument("--pubkey", default=PUBKEY_FILE,
+                        help="Path to Ed25519 public key (default: ed25519_public.pem)")
+    parser.add_argument("--signature", default=SIG_FILE,
+                        help="Path to baseline signature file (default: baseline.sig)")
+    parser.add_argument("--skip-signature", action="store_true",
+                        help="Skip signature verification (DEV ONLY).")
     # Optional override if you ever need it (normally you won’t):
     parser.add_argument("-a", "--algo", default=None,
                         help="Override algorithm (normally read from baseline _meta.algo).")
@@ -38,6 +49,37 @@ def main() -> None:
     MONITOR_FOLDER = Path(args.monitor).expanduser().resolve() if args.monitor else MONITOR_FOLDER
 
     baseline_path = Path(args.baseline).expanduser().resolve()
+
+    # Signature verification
+    if not args.skip_signature:
+        pub_path = Path(args.pubkey).expanduser().resolve()
+        sig_path = Path(args.signature).expanduser().resolve()
+
+        if not pub_path.exists():
+            print(f"[ERROR] Public key not found: {pub_path}")
+            sys.exit(1)
+        if not sig_path.exists():
+            print(f"[ERROR] Signature file not found: {sig_path}")
+            sys.exit(1)
+
+        # Load public key
+        try:
+            public_key = serialization.load_pem_public_key(pub_path.read_bytes())
+            assert isinstance(public_key, ed25519.Ed25519PublicKey)
+        except Exception as e:
+            print(f"[ERROR] Failed to load public key: {e}")
+            sys.exit(1)
+
+        # Verify signature against raw baseline bytes
+        baseline_bytes = baseline_path.read_bytes()
+        signature = sig_path.read_bytes()
+        try:
+            public_key.verify(signature, baseline_bytes)
+            print("[OK] Baseline signature verified.")
+        except Exception:
+            print("[ERROR] Baseline signature invalid!")
+            sys.exit(1)
+
     try:
         raw = load_baseline(baseline_path)
     except FileNotFoundError:
