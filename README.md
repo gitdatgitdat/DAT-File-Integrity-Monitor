@@ -1,6 +1,6 @@
 ## File Integrity Monitor (FIM)
 
-A lightweight Python-based File Integrity Monitor (FIM) that detects modifications, missing files, and unexpected changes using cryptographic hashes.  
+Python-based File Integrity Monitor (FIM) that detects modifications, missing files, and unexpected changes using cryptographic hashes.  
 Supports modern hash algorithms (SHA-2, SHA-3, BLAKE3) and optional Ed25519 signature verification to ensure baseline authenticity.  
 
 ---
